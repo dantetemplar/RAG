@@ -62,6 +62,7 @@ def process_document(
     margins: MarginsType = (0, 0, 0, 0),
     markdown_writer: WriteMarkdownProtocol = DefaultMarkdownWriter(),
     graphics_processor: ProcessGraphicsProtocol = DefaultGraphicsProcessor(),
+    extract_tables: bool | str = False,
 ) -> Output:
     """Process the document and return the text of its selected pages.
 
@@ -73,6 +74,7 @@ def process_document(
         markdown_writer: an object with a 'write_markdown' method that will be used to format layout
          elements in markdown.
         graphics_processor: an object with a 'fit' method that will be used to process pdf graphics.
+        extract_tables: a boolean flag to extract tables from the document or table extraction strategy.
     """
 
     if not isinstance(doc, pymupdf.Document):  # open the document
@@ -104,12 +106,21 @@ def process_document(
             Markdown string of page content and image, table and vector
             graphics information.
         """
-        page = doc[pno]
+        page: pymupdf.Page = doc[pno]
         left, top, right, bottom = margins
         clip = page.rect + (left, top, -right, -bottom)
         # make a TextPage for all later extractions
         # Locate all tables on page
-        tables = page.find_tables(clip=clip, strategy="lines_strict")
+        if extract_tables:
+            tables = pymupdf.table.find_tables(
+                page,
+                clip=clip,
+                strategy=extract_tables
+                if isinstance(extract_tables, str)
+                else "lines_strict",
+            )
+        else:
+            tables = []
         table_elements = []
         for t in tables:
             # Must include the header bbox (may exist outside tab.bbox)
