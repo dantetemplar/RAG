@@ -24,16 +24,15 @@ class DefaultLinkResolver(ResolveLinksProtocol):
         self.overlap = overlap
 
     def resolve_link(self, rect: pymupdf.Rect):
-        # a link should overlap at least xx% of the span
-        bbox_area = self.overlap * abs(rect)
         for link in self.links:
             hot = link["from"]  # the hot area of the link
-            if not abs(hot & rect) >= bbox_area:
+            middle = (hot.tl + hot.br) / 2  # middle point of hot area
+            if middle not in rect:
                 continue  # does not touch the bbox
             return link["uri"]
         return None
 
     def fit(self, page: pymupdf.Page):
         self.links = [
-            link for link in pymupdf.utils.get_links(page) if link["kind"] == 2
+            link for link in pymupdf.utils.get_links(page) if link["kind"] == pymupdf.LINK_URI
         ]

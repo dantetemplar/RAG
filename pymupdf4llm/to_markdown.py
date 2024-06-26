@@ -63,6 +63,8 @@ def process_document(
     markdown_writer: WriteMarkdownProtocol = DefaultMarkdownWriter(),
     graphics_processor: ProcessGraphicsProtocol = DefaultGraphicsProcessor(),
     extract_tables: bool | str = False,
+    page_width=612,
+    page_height=None,
 ) -> Output:
     """Process the document and return the text of its selected pages.
 
@@ -75,10 +77,24 @@ def process_document(
          elements in markdown.
         graphics_processor: an object with a 'fit' method that will be used to process pdf graphics.
         extract_tables: a boolean flag to extract tables from the document or table extraction strategy.
+        page_width: assumption if page layout is variable.
+        page_height: assumption if page layout is variable.
     """
 
     if not isinstance(doc, pymupdf.Document):  # open the document
         doc: pymupdf.Document = pymupdf.open(doc)
+
+    # for reflowable documents allow making 1 page for the whole document
+    if doc.is_reflowable:
+        if hasattr(page_height, "__float__"):
+            # accept user page dimensions
+            doc.layout(width=page_width, height=page_height)
+        else:
+            # no page height limit given: make 1 page for whole document
+            doc.layout(width=page_width, height=792)
+            page_count = doc.page_count
+            height = 792 * page_count  # height that covers full document
+            doc.layout(width=page_width, height=height)
 
     if pages is None:  # use all pages if no selection given
         pages: list[int] = list(range(doc.page_count))
@@ -88,7 +104,7 @@ def process_document(
     else:
         raise ValueError("Margins must have length 4.")
     if not all(isinstance(m, M) for m in margins):
-        raise ValueError("Margin values must be numbers")
+        raise ValueError("Margin values must be floats")
     margins: tuple[M, M, M, M]
 
     markdown_writer.fit((doc.load_page(n) for n in pages))

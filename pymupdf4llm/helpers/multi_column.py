@@ -74,7 +74,7 @@ def can_extend(temp, bb, bboxlist, vert_bboxes):
         True if 'temp' has no intersections with items of 'bboxlist'.
     """
     for b in bboxlist:
-        if not intersects_rects(temp, vert_bboxes) and (
+        if not intersects_bboxes(temp, vert_bboxes) and (
             b is None or b == bb or (temp & b).is_empty
         ):
             continue
@@ -83,39 +83,99 @@ def can_extend(temp, bb, bboxlist, vert_bboxes):
     return True
 
 
-def extend_right(bboxes, width, vert_bboxes, graphics_bboxes):
-    """Extend a bbox to the right page border.
+def intersects_bboxes(bb, bboxes):
+    """Return True if a bbox touches bb, else return False."""
+    for bbox in bboxes:
+        if not (bb & bbox).is_valid:
+            return True
+    return False
 
-    Whenever there is no text to the right of a bbox, enlarge it up
-    to the right page border.
 
-    Args:
-        bboxes: (list[IRect]) bboxes to check
-        width: (int) page width
-        vert_bboxes: (list[IRect]) bboxes with vertical text
-        graphics_bboxes: (list[IRect]) bboxes of images or graphics
-    Returns:
-        Potentially modified bboxes.
+def join_rects_phase1(bboxes):
+    """Postprocess identified text blocks, phase 1.
+
+    Joins any rectangles that "touch" each other. This means that
+    their intersection is valid (but may be empty).
     """
-    for i, bb in enumerate(bboxes):
-        # do not extend text in images
-        if is_in_rects(bb, graphics_bboxes):
+    prects = bboxes[:]
+    new_rects = []
+    while prects:
+        prect0 = prects[0]
+        repeat = True
+        while repeat:
+            repeat = False
+            for i in range(len(prects) - 1, 0, -1):
+                if (prect0 & prects[i]).is_valid:
+                    prect0 |= prects[i]
+                    del prects[i]
+                    repeat = True
+        new_rects.append(prect0)
+        del prects[0]
+    return new_rects
+
+
+def join_rects_phase2(bboxes):
+    """Postprocess identified text blocks, phase 2.
+
+    Increase the width of each text block so that small left or right
+    border differences are removed. Then try to join even more text
+    rectangles.
+    """
+    prects = bboxes[:]  # copy of argument list
+    for i in range(len(prects)):
+        b = prects[i]
+        # go left and right somewhat
+        x0 = min([bb.x0 for bb in prects if abs(bb.x0 - b.x0) <= 3])
+        x1 = max([bb.x1 for bb in prects if abs(bb.x1 - b.x1) <= 3])
+        b.x0 = x0  # store new left / right border
+        b.x1 = x1
+        prects[i] = b
+
+    # sort by left, top
+    prects.sort(key=lambda b: (b.x0, b.y0))
+    new_rects = [prects[0]]  # initialize with first item
+
+    # walk through the rest, top to bottom, thwn left to right
+    for r in prects[1:]:
+        r0 = new_rects[-1]  # previous bbox
+
+        # join if we have similar borders and are not to far down
+        if (
+            abs(r.x0 - r0.x0) <= 3
+            and abs(r.x1 - r0.x1) <= 3
+            and abs(r0.y1 - r.y0) <= 12
+        ):
+            r0 |= r
+            new_rects[-1] = r0
             continue
+        # else append this as new text block
+        new_rects.append(r)
+    return new_rects
 
-        # temp extends bb to the right page border
-        temp = +bb
-        temp.x1 = width
 
-        # do not cut through colored background or images
-        if intersects_rects(temp, vert_bboxes + graphics_bboxes):
-            continue
-
-        # also, do not intersect other text bboxes
-        check = can_extend(temp, bb, bboxes, vert_bboxes)
-        if check:
-            bboxes[i] = temp  # replace with enlarged bbox
-
-    return [b for b in bboxes if b]
+def join_rects_phase3(bboxes):
+    prects = bboxes[:]
+    prects.sort(key=lambda b: (b.x0, b.y0))
+    new_rects = []
+    while prects:
+        prect0 = prects[0]
+        repeat = True
+        while repeat:
+            repeat = False
+            for i in range(len(prects) - 1, 0, -1):
+                prect1 = prects[i]
+                if prect1.x0 > prect0.x1 or prect1.x1 < prect0.x0:
+                    continue
+                temp = prect0 | prects[i]
+                test = set([tuple(b) for b in prects + new_rects if b.intersects(temp)])
+                if test == {tuple(prect0), tuple(prect1)}:
+                    prect0 |= prect1
+                    del prects[i]
+                    repeat = True
+        new_rects.append(prect0)
+        del prects[0]
+    new_rects.sort(key=lambda b: (b.y0, b.x0))
+    return new_rects
 
 
 def column_boxes(
@@ -195,7 +255,10 @@ def column_boxes(
     for b in text_blocks:
         bbox = b["bbox"]
         # confirm first line to be horizontal
+        if "lines" not in b or not b["lines"]:
+            continue
         line0 = b["lines"][0]  # get first line
+
         if line0["dir"] != (1, 0):  # only accept horizontal text
             vert_bboxes.append(bbox)
             continue
@@ -217,8 +280,6 @@ def column_boxes(
 
     # Sort text bboxes by ascending background, top, then left coordinates
     bboxes.sort(key=lambda k: (k.y0, k.x0))
-    # Extend bboxes to the right where possible
-    bboxes = extend_right(bboxes, int(page.rect.width), vert_bboxes, graphic_rects)
 
     # --------------------------------------------------------------------
     # Join bboxes to establish some column structure
@@ -268,6 +329,11 @@ def column_boxes(
     # do some elementary cleaning
     nblocks = clean_nblocks(nblocks)
 
+    # final joining of overlapping rectangles
+    nblocks = join_rects_phase1(nblocks)
+    nblocks = join_rects_phase2(nblocks)
+    nblocks = join_rects_phase3(nblocks)
+
     # return identified text bboxes
     return nblocks
 
@@ -280,6 +346,8 @@ if __name__ == "__main__":
     Then save the file under the name "input-blocks.pdf".
     """
     import sys
+
+    RED = pymupdf.pdfcolor["red"]
 
     # get the file name
     filename = sys.argv[1]
@@ -298,7 +366,6 @@ if __name__ == "__main__":
 
     # open document
     doc = pymupdf.open(filename)
-
     # iterate over the pages
     for page in doc:
         # get the text bboxes
@@ -314,10 +381,10 @@ if __name__ == "__main__":
             shape.draw_rect(rect)  # draw a border
 
             # write sequence number
-            shape.insert_text(rect.tl + (5, 15), str(i), color=pymupdf.pdfcolor["red"])
+            shape.insert_text(rect.tl + (5, 15), str(i), color=RED)
 
         # finish drawing / text with color red
-        shape.finish(color=pymupdf.pdfcolor["red"])
+        shape.finish(color=RED)
         shape.commit()  # store to the page
 
     # save document with text bboxes
