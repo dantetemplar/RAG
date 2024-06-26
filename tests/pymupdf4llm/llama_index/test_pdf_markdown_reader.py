@@ -12,7 +12,7 @@ except ImportError:
     raise NotImplementedError("Please install 'llama_index' is needed.")
 
 
-from pymupdf4llm.pymupdf4llm.llama_index.pdf_markdown_reader import PDFMarkdownReader
+from pymupdf4llm.llama.pdf_markdown_reader import LlamaMarkdownReader 
 
 PDF = "input.pdf"
 
@@ -32,7 +32,7 @@ def _get_test_file_path(file_name: str, __file__: str = __file__) -> str:
 def test_load_data():
     # Arrange
     # ---
-    pdf_reader = PDFMarkdownReader()
+    pdf_reader = LlamaMarkdownReader()
     path = _get_test_file_path(PDF, __file__)
     extra_info = {"test_key": "test_value"}
 
@@ -50,7 +50,7 @@ def test_load_data():
 def test_load_data_with_invalid_file_path():
     # Arrange
     # ---
-    pdf_reader = PDFMarkdownReader()
+    pdf_reader = LlamaMarkdownReader()
     extra_info = {"test_key": "test_value"}
     path = "fake/path"
 
@@ -63,7 +63,7 @@ def test_load_data_with_invalid_file_path():
 def test_load_data_with_invalid_extra_info():
     # Arrange
     # ---
-    pdf_reader = PDFMarkdownReader()
+    pdf_reader = LlamaMarkdownReader()
     extra_info = "invalid_extra_info"
     path = _get_test_file_path(PDF, __file__)
 
@@ -77,7 +77,7 @@ def test_load_data_with_invalid_extra_info():
 async def test_aload_data_with_invalid_file_path():
     # Arrange
     # ---
-    pdf_reader = PDFMarkdownReader()
+    pdf_reader = LlamaMarkdownReader()
     extra_info = {"test_key": "test_value"}
 
     # Act
@@ -94,7 +94,7 @@ async def test_aload_data_with_invalid_file_path():
 async def test_aload_data_with_invalid_extra_info():
     # Arrange
     # ---
-    pdf_reader = PDFMarkdownReader()
+    pdf_reader = LlamaMarkdownReader()
     extra_info = "invalid_extra_info"
 
     # Act
