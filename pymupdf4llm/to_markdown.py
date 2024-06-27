@@ -64,7 +64,8 @@ def process_document(
     graphics_processor: ProcessGraphicsProtocol = DefaultGraphicsProcessor(),
     extract_tables: bool | str = False,
     page_width=612,
-    page_height=None,
+    page_height: int | None = None,
+    graphics_limit: int | None = None,
 ) -> Output:
     """Process the document and return the text of its selected pages.
 
@@ -79,6 +80,7 @@ def process_document(
         extract_tables: a boolean flag to extract tables from the document or table extraction strategy.
         page_width: assumption if page layout is variable.
         page_height: assumption if page layout is variable.
+        graphics_limit: ignore page with too many vector graphics.
     """
 
     if not isinstance(doc, pymupdf.Document):  # open the document
@@ -123,6 +125,13 @@ def process_document(
             graphics information.
         """
         page: pymupdf.Page = doc[pno]
+        if graphics_limit is not None:
+            test_paths = page.get_cdrawings()
+            if (excess := len(test_paths)) > graphics_limit:
+                md_string = (
+                    f"<!--Ignoring page {page.number} with {excess} vector graphics.-->"
+                )
+                return md_string, [], []
         left, top, right, bottom = margins
         clip = page.rect + (left, top, -right, -bottom)
         # make a TextPage for all later extractions
