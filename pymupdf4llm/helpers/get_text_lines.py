@@ -15,6 +15,7 @@ License GNU Affero GPL 3.0
 import string
 import sys
 
+from pymupdf4llm.helpers.rectangle_utils import do_intersects
 from .._pymupdf import pymupdf
 
 WHITE = set(string.whitespace)
@@ -53,21 +54,26 @@ def get_raw_lines(textpage, clip=None, tolerance=3):
     y_delta = tolerance  # allowable vertical coordinate deviation
     if clip is None:  # use TextPage if not provided
         clip = textpage.rect
+
     # extract text blocks - if bbox is not empty
-    blocks = [
-        b
-        for b in textpage.extractDICT()["blocks"]
-        if b["type"] == 0 and not pymupdf.Rect(b["bbox"]).is_empty
-    ]
+    blocks = []
+
+    for b in textpage.extractDICT()["blocks"]:
+        if b["type"] != 0:
+            continue
+        _rect = pymupdf.Rect(b["bbox"])
+        if _rect.is_empty:
+            continue
+        # skip if not intersects
+        if not do_intersects(clip, _rect):
+            continue
+        blocks.append(b)
+
     spans = []  # all spans in TextPage here
     for bno, b in enumerate(blocks):
         for lno, l in enumerate(b["lines"]):
             for s in l["spans"]:
                 sbbox = pymupdf.Rect(s["bbox"])  # turn to a Rect
-                if (
-                    abs(sbbox & clip) < abs(sbbox) * 0.8
-                ):  # must be inside parameter rectangle
-                    continue
                 if is_white(s["text"]):  # ignore white text
                     continue
                 s["bbox"] = sbbox  # update with the Rect version

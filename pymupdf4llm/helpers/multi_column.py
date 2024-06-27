@@ -60,7 +60,7 @@ Copyright 2024 Artifex Software, Inc.
 License GNU Affero GPL 3.0
 """
 
-from .rectangle_utils import is_in_rects, any_rect_between_over_y, intersects_rects
+from .rectangle_utils import is_in_rects, any_rect_between_over_y, do_intersects
 from .._pymupdf import pymupdf
 
 
@@ -74,11 +74,14 @@ def can_extend(temp, bb, bboxlist, vert_bboxes):
         True if 'temp' has no intersections with items of 'bboxlist'.
     """
     for b in bboxlist:
-        if not intersects_bboxes(temp, vert_bboxes) and (
-            b is None or b == bb or (temp & b).is_empty
-        ):
+        if intersects_bboxes(temp, vert_bboxes):
+            return False
+
+        if b is None or b is bb:
             continue
-        return False
+
+        if do_intersects(temp, b):
+            return False
 
     return True
 
@@ -246,6 +249,7 @@ def column_boxes(
 
     # blocks of text on page
     text_blocks = textpage.extractDICT()["blocks"]
+
     text_blocks = list(
         filter(lambda b: not is_in_rects(b["bbox"], graphic_rects), text_blocks)
     )

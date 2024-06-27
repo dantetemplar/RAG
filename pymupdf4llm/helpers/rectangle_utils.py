@@ -1,26 +1,66 @@
+from typing import TypeAlias
+
 from .._pymupdf import pymupdf
 
+RectOrTuple: TypeAlias = tuple[float, float, float, float] | pymupdf.Rect
 
-def is_in_rects(rect: pymupdf.Rect, rect_list: list[pymupdf.Rect]):
+
+def is_inside(rect1: RectOrTuple, rect2: RectOrTuple):
+    """
+    Determines if rect1 is completely inside rect2.
+
+    :param rect1: Tuple of coordinates (x0, y0, x1, y1) representing the first rectangle
+    :param rect2: Tuple of coordinates (x0, y0, x1, y1) representing the second rectangle
+    :return: True if rect1 is completely inside rect2, False otherwise
+    """
+    x0_1, y0_1, x1_1, y1_1 = rect1
+    x0_2, y0_2, x1_2, y1_2 = rect2
+
+    return x0_2 <= x0_1 <= x1_1 <= x1_2 and y0_2 <= y0_1 <= y1_1 <= y1_2
+
+
+def is_in_rects(rect: RectOrTuple, rect_list: list[RectOrTuple]):
     """
     Check if rect is contained in a rect of the list.
     Return the index + 1 of the container rect.
     """
     for i, r in enumerate(rect_list, start=1):
-        if rect in r:
+        if is_inside(rect, r):
             return i
     return 0
 
 
-def intersects_rects(rect: pymupdf.Rect, rect_list: list[pymupdf.Rect]):
+def intersects_rects(rect: RectOrTuple, rect_list: list[RectOrTuple]):
     """
     Check if rect intersects with any rect of the list.
     Return the index + 1 of the first intersecting rect.
     """
     for i, r in enumerate(rect_list, start=1):
-        if not (rect & r).is_empty:
+        if do_intersects(rect, r):
             return i
     return 0
+
+
+def do_intersects(rect1: RectOrTuple, rect2: RectOrTuple):
+    """
+    Determines if two rectangles intersect.
+
+    :param rect1: Tuple of coordinates (x0, y0, x1, y1) representing the first rectangle
+    :param rect2: Tuple of coordinates (x0, y0, x1, y1) representing the second rectangle
+    :return: True if the rectangles intersect, False otherwise
+    """
+    x0_1, y0_1, x1_1, y1_1 = rect1
+    x0_2, y0_2, x1_2, y1_2 = rect2
+
+    # Check if one rectangle is to the left of the other
+    if x1_1 <= x0_2 or x1_2 <= x0_1:
+        return False
+
+    # Check if one rectangle is above the other
+    if y1_1 <= y0_2 or y1_2 <= y0_1:
+        return False
+
+    return True
 
 
 def intersects_over_x(rect1: pymupdf.Rect, rect2: pymupdf.Rect):
